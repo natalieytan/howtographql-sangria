@@ -24,6 +24,9 @@ object GraphQLSchema {
 
   //QueryType is a top level object of schema
 
+  val Id = Argument("id", IntType)
+  val Ids = Argument("ids", ListInputType(IntType))
+
   val QueryType = ObjectType(
     "Query",
     fields[MyContext, Unit](
@@ -33,13 +36,13 @@ object GraphQLSchema {
       ),
       Field("link",
         OptionType(LinkType), // expected output type
-        arguments = List(Argument("id", IntType)),  // list of expected arguments defined by name and type
-        resolve = c => c.ctx.dao.getLink(c.arg[Int]("id"))
+        arguments = Id :: Nil,  // Arguments = list of expected arguments defined by name and type, // expecting id argument of type int
+        resolve = c => c.ctx.dao.getLink(c.arg(Id))
       ),
       Field("links",
         ListType(LinkType),
-        arguments = List(Argument("ids", ListInputType(IntType))), // InputType are used to passed incoming data, ObjectType 9mostly) for outgoing data
-        resolve = c => c.ctx.dao.getLinks(c.arg[Seq[Int]]("ids"))
+        arguments = Ids :: Nil, // InputType are used to passed incoming data, ObjectType 9mostly) for outgoing data
+        resolve = c => c.ctx.dao.getLinks(c.arg(Ids)) // Pass argument to resolver
       )
     )
   )
