@@ -1,0 +1,10 @@
+.gradle
+
+build
+bin
+
+classes/
+out/
+target/
+project/
+.metals
