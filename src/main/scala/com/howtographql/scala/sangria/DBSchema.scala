@@ -9,10 +9,29 @@ import scala.language.postfixOps
 
 
 object DBSchema {
+
+  // Mapping to othe database table
+  class LinksTable(tag: Tag) extends Table[Link](tag, "LINKS") {
+    def id = column[Int]("ID", O.PrimaryKey, O.AutoInc)
+    def url = column[String]("URL")
+    def description = column[String]("DESCRIPTION")
+
+    def * = (id, url, description).mapTo[Link]
+  }
+
+  // Helper accessing data in table
+  val Links = TableQuery[LinksTable]
+
   /**
     * Load schema and populate sample data withing this Sequence od DBActions
     */
   val databaseSetup = DBIO.seq(
+    Links.schema.create,
+    Links forceInsertAll Seq(
+      Link(1, "http://howtographql.com", "Awesome community driven GraphQL tutorial"),
+      Link(2, "http://graphql.org", "Official GraphQL web page"),
+      Link(3, "https://facebook.github.io/graphql/", "GraphQL specification")
+    )
   )
 
 
