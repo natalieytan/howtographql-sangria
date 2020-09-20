@@ -23,11 +23,24 @@ object GraphQLSchema {
   )
 
   //QueryType is a top level object of schema
-  
+
   val QueryType = ObjectType(
     "Query",
     fields[MyContext, Unit](
-      Field("allLinks", ListType(LinkType), resolve = c => c.ctx.dao.allLinks)
+      Field("allLinks",
+        ListType(LinkType),
+        resolve = c => c.ctx.dao.allLinks
+      ),
+      Field("link",
+        OptionType(LinkType), // expected output type
+        arguments = List(Argument("id", IntType)),  // list of expected arguments defined by name and type
+        resolve = c => c.ctx.dao.getLink(c.arg[Int]("id"))
+      ),
+      Field("links",
+        ListType(LinkType),
+        arguments = List(Argument("ids", ListInputType(IntType))), // InputType are used to passed incoming data, ObjectType 9mostly) for outgoing data
+        resolve = c => c.ctx.dao.getLinks(c.arg[Seq[Int]]("ids"))
+      )
     )
   )
 
