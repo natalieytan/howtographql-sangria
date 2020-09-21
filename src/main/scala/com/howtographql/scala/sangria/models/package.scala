@@ -1,6 +1,12 @@
 package com.howtographql.scala.sangria
 
-package object models {
+import akka.http.scaladsl.model.DateTime
+import sangria.validation.Violation
 
-  case class Link(id: Int, url: String, description: String)
+package object models {
+  case class Link(id: Int, url: String, description: String, createdAt: DateTime)
+
+  case object DateTimeCoerceViolation extends Violation {
+    override def errorMessage: String = "Error during parsing DateTime"
+  }
 }

@@ -1,5 +1,8 @@
 package com.howtographql.scala.sangria
 
+import java.sql.Timestamp
+
+import akka.http.scaladsl.model.DateTime
 import slick.jdbc.H2Profile.api._
 import com.howtographql.scala.sangria.models._
 
@@ -10,13 +13,19 @@ import scala.language.postfixOps
 
 object DBSchema {
 
+  implicit val dateTimeColumnType = MappedColumnType.base[DateTime, Timestamp](
+    dt => new Timestamp(dt.clicks),
+    ts => DateTime(ts.getTime)
+  )
+
   // Mapping to othe database table
   class LinksTable(tag: Tag) extends Table[Link](tag, "LINKS") {
     def id = column[Int]("ID", O.PrimaryKey, O.AutoInc)
     def url = column[String]("URL")
     def description = column[String]("DESCRIPTION")
+    def createdAt = column[DateTime]("CREATED_AT")
 
-    def * = (id, url, description).mapTo[Link]
+    def * = (id, url, description, createdAt).mapTo[Link]
   }
 
   // Helper accessing data in table
@@ -28,9 +37,9 @@ object DBSchema {
   val databaseSetup = DBIO.seq(
     Links.schema.create,
     Links forceInsertAll Seq(
-      Link(1, "http://howtographql.com", "Awesome community driven GraphQL tutorial"),
-      Link(2, "http://graphql.org", "Official GraphQL web page"),
-      Link(3, "https://facebook.github.io/graphql/", "GraphQL specification")
+      Link(1, "http://howtographql.com", "Awesome community driven GraphQL tutorial", DateTime(2017,9,12)),
+      Link(2, "http://graphql.org", "Official GraphQL web page",DateTime(2017,10,1)),
+      Link(3, "https://facebook.github.io/graphql/", "GraphQL specification",DateTime(2017,10,2))
     )
   )
 

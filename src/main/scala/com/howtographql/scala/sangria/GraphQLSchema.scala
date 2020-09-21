@@ -1,15 +1,33 @@
 package com.howtographql.scala.sangria
 
-import com.howtographql.scala.sangria.models.Link
+import akka.http.scaladsl.model.DateTime
+import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Link}
 import sangria.schema._
 import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId}
-
+import sangria.ast.StringValue
 
 // What we are able to query for
 // Interprets how data fetched and which data source it could use
 
 
 object GraphQLSchema {
+  // custom scalar declare with implicit
+  // scalars make possible to parse values type you want to
+  implicit val GraphQLDateTime = ScalarType[DateTime](
+    "DateTime", // this name will be used in schema
+    coerceOutput = (dt, _) => dt.toString, // used to output data (DateTime to string)
+    coerceInput = { // need a partial function with Value as a single argument. In our case we're parsing from StringValue
+      case StringValue(dt, _, _) => DateTime.fromIsoDateTimeString(dt).toRight(DateTimeCoerceViolation)
+      case _ => Left(DateTimeCoerceViolation)
+    },
+    coerceUserInput = { // converts literal (almost always string)
+      case s: String => DateTime.fromIsoDateTimeString(s).toRight(DateTimeCoerceViolation)
+      case _ => Left(DateTimeCoerceViolation)
+    }
+  )
+  // Both  coerceInput and coerceUserInput functions should respond with Either
+  // Right should consist an object of expected type
+  // In the case of failure, Left should contain Violation Subtype
 
   // Definition of ObectType for Link Class
   val LinkType = ObjectType[Unit, Link](
@@ -17,7 +35,8 @@ object GraphQLSchema {
     fields[Unit, Link](
       Field("id", IntType, resolve = _.value.id),
       Field("url", StringType, resolve = _.value.url),
-      Field("description", StringType, resolve = _.value.description)
+      Field("description", StringType, resolve = _.value.description),
+      Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)
     )
     // fields = name of fields, function you want to expose
     // every field has to contain a resolve function
