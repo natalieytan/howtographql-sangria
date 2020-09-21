@@ -1,7 +1,7 @@
 package com.howtographql.scala.sangria
 
 import akka.http.scaladsl.model.DateTime
-import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Link, User, Vote}
+import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Identifiable, Link, User, Vote}
 import sangria.schema._
 import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId}
 import sangria.ast.StringValue
@@ -29,11 +29,17 @@ object GraphQLSchema {
   // Right should consist an object of expected type
   // In the case of failure, Left should contain Violation Subtype
 
+  val IdentifiableType = InterfaceType(
+    "Identifiable",
+    fields[Unit, Identifiable](
+      Field("id", IntType, resolve = _.value.id)
+    )
+  )
   // Definition of ObectType for Link Class
   val LinkType = ObjectType[Unit, Link](
     "Link", // name of schema
+    interfaces[Unit, Link](IdentifiableType),
     fields[Unit, Link](
-      Field("id", IntType, resolve = _.value.id),
       Field("url", StringType, resolve = _.value.url),
       Field("description", StringType, resolve = _.value.description),
       Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)
@@ -45,29 +51,28 @@ object GraphQLSchema {
 
   val UserType = ObjectType[Unit, User](
     name = "User",
+    interfaces[Unit, User](IdentifiableType),
     fields[Unit, User](
-      Field("id", IntType, resolve = _.value.id),
       Field("name", StringType, resolve = _.value.name),
       Field("email", StringType, resolve = _.value.email),
       Field("password", StringType, resolve = _.value.password),
       Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)
     )
   )
-  implicit  val userHasId = HasId[User, Int](_.id) // HasId typeClass
+
   val usersFetcher = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
   )
 
   implicit val VoteType = ObjectType[Unit, Vote](
     name = "Vote",
+    interfaces[Unit, Vote](IdentifiableType),
     fields[Unit, Vote](
-      Field("id", IntType, resolve = _.value.id),
       Field("userId", IntType, resolve = _.value.id),
       Field("linkId", IntType, resolve = _.value.linkId),
       Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt),
     )
   )
-  implicit val voteHasId = HasId[Vote, Int](_.id)
 
   val votesFetcher = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids)
@@ -77,8 +82,6 @@ object GraphQLSchema {
   val Id = Argument("id", IntType)
   val Ids = Argument("ids", ListInputType(IntType))
 
-  implicit val linkHasId = HasId[Link, Int](_.id)
-  
   // Fetcher - mechanism for batch reterieval of objects from their sources (e.g. DB or external API)
   // Fetcher - specialized verision of Deferred resolver (high level API)
   // Optimizes resolution of fetched entities based on ID or relation
