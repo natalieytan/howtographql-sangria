@@ -1,7 +1,7 @@
 package com.howtographql.scala.sangria
 
 import akka.http.scaladsl.model.DateTime
-import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Link}
+import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Link, User}
 import sangria.schema._
 import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId}
 import sangria.ast.StringValue
@@ -43,7 +43,21 @@ object GraphQLSchema {
     // resolve = how to retrieve data for field
   )
 
-  //QueryType is a top level object of schema
+  val UserType = ObjectType[Unit, User](
+    name = "User",
+    fields[Unit, User](
+      Field("id", IntType, resolve = _.value.id),
+      Field("name", StringType, resolve = _.value.name),
+      Field("email", StringType, resolve = _.value.email),
+      Field("password", StringType, resolve = _.value.password),
+      Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)
+    )
+  )
+  implicit  val userHasId = HasId[User, Int](_.id) // HasId typeClass
+  val usersFetcher = Fetcher(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
+  )
+
 
   val Id = Argument("id", IntType)
   val Ids = Argument("ids", ListInputType(IntType))
@@ -64,8 +78,9 @@ object GraphQLSchema {
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids)
   )
 
-  val Resolver = DeferredResolver.fetchers(linksFetcher)
+  val Resolver = DeferredResolver.fetchers(linksFetcher, usersFetcher)
 
+  // QueryType is a top level object of schema
   val QueryType = ObjectType(
     "Query",
     fields[MyContext, Unit](
@@ -82,6 +97,11 @@ object GraphQLSchema {
         ListType(LinkType),
         arguments = Ids :: Nil, // InputType are used to passed incoming data, ObjectType 9mostly) for outgoing data
         resolve = c => linksFetcher.deferSeq(c.arg(Ids)) // Pass argument to resolver
+      ),
+      Field("users",
+        ListType(UserType),
+        arguments = List(Ids),
+        resolve = c => usersFetcher.deferSeq(c.arg(Ids))
       )
     )
   )

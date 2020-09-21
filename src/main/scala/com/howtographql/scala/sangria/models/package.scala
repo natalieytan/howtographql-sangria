@@ -9,4 +9,6 @@ package object models {
   case object DateTimeCoerceViolation extends Violation {
     override def errorMessage: String = "Error during parsing DateTime"
   }
+
+  case class User(id: Int, name: String, email: String, password: String, createdAt: DateTime = DateTime.now)
 }
