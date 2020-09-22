@@ -3,7 +3,7 @@ package com.howtographql.scala.sangria
 import akka.http.scaladsl.model.DateTime
 import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Identifiable, Link, User, Vote}
 import sangria.schema._
-import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId}
+import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId, Relation, RelationIds}
 import sangria.ast.StringValue
 
 // What we are able to query for
@@ -35,34 +35,38 @@ object GraphQLSchema {
       Field("id", IntType, resolve = _.value.id)
     )
   )
-  // Definition of ObectType for Link Class
-  val LinkType = ObjectType[Unit, Link](
+
+  // lazy and type annotate to get around circular reference in Object ype declaration
+  // Definition of ObjectType for Link Class
+  lazy val LinkType: ObjectType[Unit, Link] = ObjectType[Unit, Link](
     "Link", // name of schema
     interfaces[Unit, Link](IdentifiableType),
-    fields[Unit, Link](
+    () => fields[Unit, Link](
       Field("url", StringType, resolve = _.value.url),
       Field("description", StringType, resolve = _.value.description),
-      Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)
+      Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt),
+      Field("postedBy", UserType, resolve = c => usersFetcher.defer(c.value.postedBy))
     )
     // fields = name of fields, function you want to expose
     // every field has to contain a resolve function
     // resolve = how to retrieve data for field
   )
 
-  val UserType = ObjectType[Unit, User](
+  // lazy and type annotate to get around circular reference in Object ype declaration
+  lazy val UserType: ObjectType[Unit, User] = ObjectType[Unit, User](
     name = "User",
     interfaces[Unit, User](IdentifiableType),
-    fields[Unit, User](
+    () => fields[Unit, User](
       Field("name", StringType, resolve = _.value.name),
       Field("email", StringType, resolve = _.value.email),
       Field("password", StringType, resolve = _.value.password),
-      Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)
-    )
+      Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt),
+      Field("links", ListType(LinkType),
+        resolve = c =>  linksFetcher.deferRelSeq(linkByUserRel, c.value.id))    )
   )
-
-  val usersFetcher = Fetcher(
-    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
-  )
+  // .deferRel needs 2 arguments
+  // 1) relation object = first argument
+  // 2) function which will get mapping value from entity
 
   implicit val VoteType = ObjectType[Unit, Vote](
     name = "Vote",
@@ -74,13 +78,19 @@ object GraphQLSchema {
     )
   )
 
+
+  // SimpleRelation
+  // 2 Arguments: 1) name, 2) function which extracts sequence of user Ids from link entity
+  val linkByUserRel = Relation[Link, Int]("byUser", l => Seq(l.postedBy))
+
+
+  val usersFetcher = Fetcher(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
+  )
+
   val votesFetcher = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids)
   )
-
-
-  val Id = Argument("id", IntType)
-  val Ids = Argument("ids", ListInputType(IntType))
 
   // Fetcher - mechanism for batch reterieval of objects from their sources (e.g. DB or external API)
   // Fetcher - specialized verision of Deferred resolver (high level API)
@@ -92,9 +102,17 @@ object GraphQLSchema {
   // 1) either by implicit val in companion object of model
   // 2) or explicitly passing it in
   // 3) implicit val in the same context
-  val linksFetcher = Fetcher(
-    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids)
+  val linksFetcher = Fetcher.rel(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids),
+    (ctx: MyContext, ids: RelationIds[Link]) => ctx.dao.getLinksByUserIds(ids(linkByUserRel))
   )
+  // .rel needs second function to be passed in as arguemnt
+  // used for fetching related data from datasource
+
+
+  val Id = Argument("id", IntType)
+  val Ids = Argument("ids", ListInputType(IntType))
+
 
   val Resolver = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
 

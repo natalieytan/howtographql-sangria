@@ -23,4 +23,10 @@ class DAO(db: Database) {
       Votes.filter(_.id inSet ids).result
     )
   }
+
+  def getLinksByUserIds(ids: Seq[Int]): Future[Seq[Link]] = {
+    db.run {
+      Links.filter(_.postedBy inSet ids).result
+    }
+  }
 }
