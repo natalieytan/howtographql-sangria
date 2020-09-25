@@ -1,18 +1,26 @@
 package com.howtographql.scala.sangria
 
 import akka.http.scaladsl.model.DateTime
-import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Identifiable, Link, User, Vote}
-import sangria.schema._
-import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId, Relation, RelationIds}
+import com.howtographql.scala.sangria.models._
 import sangria.ast.StringValue
+import sangria.execution.deferred.{DeferredResolver, Fetcher, Relation, RelationIds}
 import sangria.marshalling.FromInput
+import sangria.marshalling.sprayJson._
+import sangria.schema._
 import sangria.util.tag.@@
+import spray.json.DefaultJsonProtocol._
+import spray.json.RootJsonFormat
+
 
 // What we are able to query for
 // Interprets how data fetched and which data source it could use
 
 
 object GraphQLSchema {
+  // Sangria needs to read part of a JSON like structure and covert it to case class
+  implicit val authProviderEmailFormat: RootJsonFormat[AuthProviderEmail] = jsonFormat2(AuthProviderEmail)
+  implicit val authProviderSignupDataFormat: RootJsonFormat[AuthProviderSignupData] = jsonFormat1(AuthProviderSignupData)
+
   // custom scalar declare with implicit
   // scalars make possible to parse values type you want to
   implicit val GraphQLDateTime: ScalarType[DateTime] = ScalarType[DateTime](
@@ -65,7 +73,7 @@ object GraphQLSchema {
       Field("password", StringType, resolve = _.value.password),
       Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt),
       Field("links", ListType(LinkType),
-        resolve = c =>  linksFetcher.deferRelSeq(linkByUserRel, c.value.id)
+        resolve = c => linksFetcher.deferRelSeq(linkByUserRel, c.value.id)
       ),
       Field("votes", ListType(VoteType), resolve = c => votesFetcher.deferRelSeq(voteByUserRel, c.value.id))
     )
@@ -83,6 +91,21 @@ object GraphQLSchema {
       Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt),
       Field("user", UserType, resolve = c => usersFetcher.defer(c.value.userId)),
       Field("link", LinkType, resolve = c => linksFetcher.defer(c.value.linkId))
+    )
+  )
+
+  implicit val AuthProviderEmailInputType: InputObjectType[AuthProviderEmail] = InputObjectType[AuthProviderEmail](
+    "AUTH_PROVIDER_EMAIL",
+    List(
+      InputField("email", StringType),
+      InputField("password", StringType)
+    )
+  )
+
+  lazy val AuthProviderSignupDataInputType: InputObjectType[AuthProviderSignupData] = InputObjectType[AuthProviderSignupData](
+    "AuthProviderSignupData",
+    List(
+      InputField("email", AuthProviderEmailInputType)
     )
   )
 
@@ -129,7 +152,13 @@ object GraphQLSchema {
 
   val Id: Argument[Int] = Argument("id", IntType)
   val Ids: Argument[Seq[Int @@ FromInput.CoercedScalaResult]] = Argument("ids", ListInputType(IntType))
-
+  val NameArg: Argument[String] = Argument("name", StringType)
+  val AuthProviderArg: Argument[AuthProviderSignupData] = Argument("authProvider", AuthProviderSignupDataInputType)
+  val UrlArg: Argument[String] = Argument("url", StringType)
+  val DescArg: Argument[String] = Argument("description", StringType)
+  val PostedByArg: Argument[Int] = Argument("postedById", IntType)
+  val LinkIdArg: Argument[Int] = Argument("linkId", IntType)
+  val UserIdArg: Argument[Int] = Argument("userId", IntType)
 
   val Resolver: DeferredResolver[MyContext] = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
 
@@ -143,7 +172,7 @@ object GraphQLSchema {
       ),
       Field("link",
         OptionType(LinkType), // expected output type
-        arguments = Id :: Nil,  // Arguments = list of expected arguments defined by name and type, // expecting id argument of type int
+        arguments = Id :: Nil, // Arguments = list of expected arguments defined by name and type, // expecting id argument of type int
         resolve = c => linksFetcher.deferOpt(c.arg(Id))
       ),
       Field("links",
@@ -164,5 +193,30 @@ object GraphQLSchema {
     )
   )
 
-  val SchemaDefinition: Schema[MyContext, Unit] = Schema(QueryType)
+  val Mutation: ObjectType[MyContext, Unit] = ObjectType(
+    "Mutation",
+    fields[MyContext, Unit](
+      Field(
+        "createUser",
+        UserType,
+        arguments = NameArg :: AuthProviderArg :: Nil,
+        resolve = c => c.ctx.dao.createUser(c.arg(NameArg), c.arg(AuthProviderArg))
+      ),
+      Field(
+        "createLink",
+        LinkType,
+        arguments = UrlArg :: DescArg :: PostedByArg :: Nil,
+        resolve = c => c.ctx.dao.createLink(c.arg(UrlArg), c.arg(DescArg), c.arg(PostedByArg))
+      ),
+      Field(
+        "createVote",
+        VoteType,
+        arguments = LinkIdArg :: UserIdArg :: Nil,
+        resolve = c => c.ctx.dao.createVote(c.arg(LinkIdArg), c.arg(UserIdArg))
+      )
+    )
+  )
+
+  // All mutations are optional so you have to wrap it in Some
+  val SchemaDefinition: Schema[MyContext, Unit] = Schema(QueryType, Some(Mutation))
 }
