@@ -62,41 +62,48 @@ object GraphQLSchema {
       Field("password", StringType, resolve = _.value.password),
       Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt),
       Field("links", ListType(LinkType),
-        resolve = c =>  linksFetcher.deferRelSeq(linkByUserRel, c.value.id))    )
+        resolve = c =>  linksFetcher.deferRelSeq(linkByUserRel, c.value.id)
+      ),
+      Field("votes", ListType(VoteType), resolve = c => votesFetcher.deferRelSeq(voteByUserRel, c.value.id))
+    )
   )
   // .deferRel needs 2 arguments
   // 1) relation object = first argument
   // 2) function which will get mapping value from entity
 
-  implicit val VoteType = ObjectType[Unit, Vote](
+  lazy val VoteType: ObjectType[Unit, Vote] = ObjectType[Unit, Vote](
     name = "Vote",
     interfaces[Unit, Vote](IdentifiableType),
-    fields[Unit, Vote](
+    () => fields[Unit, Vote](
       Field("userId", IntType, resolve = _.value.id),
       Field("linkId", IntType, resolve = _.value.linkId),
       Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt),
+      Field("user", UserType, resolve = c => usersFetcher.defer(c.value.userId))
     )
   )
 
 
   // SimpleRelation
   // 2 Arguments: 1) name, 2) function which extracts sequence of user Ids from link entity
+  // In relation we always have to return sequence
   val linkByUserRel = Relation[Link, Int]("byUser", l => Seq(l.postedBy))
 
+  val voteByUserRel = Relation[Vote, Int]("byUser", v => Seq(v.userId))
 
-  val usersFetcher = Fetcher(
+  val usersFetcher: Fetcher[MyContext, User, User, Int] = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
   )
 
-  val votesFetcher = Fetcher(
-    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids)
+  val votesFetcher = Fetcher.rel(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids),
+    (ctx: MyContext, ids: RelationIds[Vote]) => ctx.dao.getVotesByUserIds(ids(voteByUserRel))
   )
 
-  // Fetcher - mechanism for batch reterieval of objects from their sources (e.g. DB or external API)
-  // Fetcher - specialized verision of Deferred resolver (high level API)
+  // Fetcher - mechanism for batch retrieval of objects from their sources (e.g. DB or external API)
+  // Fetcher - specialized version of Deferred resolver (high level API)
   // Optimizes resolution of fetched entities based on ID or relation
-  // Deduplicates entities and cahces results
-  // Optimizees the query before call
+  // Deduplicate entities and caches results
+  // Optimizes the query before call
   // Gathers all the data it should fetch, then execute queries
   // Fetcher needs something (`HasId`) to extract from entities,
   // 1) either by implicit val in companion object of model
@@ -106,8 +113,9 @@ object GraphQLSchema {
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids),
     (ctx: MyContext, ids: RelationIds[Link]) => ctx.dao.getLinksByUserIds(ids(linkByUserRel))
   )
-  // .rel needs second function to be passed in as arguemnt
+  // .rel needs second function to be passed in as argument
   // used for fetching related data from datasource
+  // ids(linksByUserRel) extracts user ids defined relation
 
 
   val Id = Argument("id", IntType)
