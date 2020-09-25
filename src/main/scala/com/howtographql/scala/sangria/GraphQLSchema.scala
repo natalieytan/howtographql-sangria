@@ -47,7 +47,8 @@ object GraphQLSchema {
       Field("url", StringType, resolve = _.value.url),
       Field("description", StringType, resolve = _.value.description),
       Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt),
-      Field("postedBy", UserType, resolve = c => usersFetcher.defer(c.value.postedBy))
+      Field("postedBy", UserType, resolve = c => usersFetcher.defer(c.value.postedBy)),
+      Field("votes", ListType(VoteType), resolve = c => votesFetcher.deferRelSeq(voteByLinkRel, c.value.id))
     )
     // fields = name of fields, function you want to expose
     // every field has to contain a resolve function
@@ -80,7 +81,8 @@ object GraphQLSchema {
       Field("userId", IntType, resolve = _.value.id),
       Field("linkId", IntType, resolve = _.value.linkId),
       Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt),
-      Field("user", UserType, resolve = c => usersFetcher.defer(c.value.userId))
+      Field("user", UserType, resolve = c => usersFetcher.defer(c.value.userId)),
+      Field("link", LinkType, resolve = c => linksFetcher.defer(c.value.linkId))
     )
   )
 
@@ -92,14 +94,19 @@ object GraphQLSchema {
 
   val voteByUserRel: Relation[Vote, Vote, Int] = Relation[Vote, Int]("byUser", v => Seq(v.userId))
 
+  val voteByLinkRel: Relation[Vote, Vote, Int] = Relation[Vote, Int]("byLink", v => Seq(v.linkId))
+
   val usersFetcher: Fetcher[MyContext, User, User, Int] = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
   )
 
   val votesFetcher: Fetcher[MyContext, Vote, Vote, Int] = Fetcher.rel(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids),
-    (ctx: MyContext, ids: RelationIds[Vote]) => ctx.dao.getVotesByUserIds(ids(voteByUserRel))
+    (ctx: MyContext, ids: RelationIds[Vote]) => ctx.dao.getVotesByRelationIds(ids),
   )
+
+  // ids(voteByUserRel) extracts users ids and passes it to the db function
+  // we can pass ids down to the db function and let DAO decide which field it should use to filter
 
   // Fetcher - mechanism for batch retrieval of objects from their sources (e.g. DB or external API)
   // Fetcher - specialized version of Deferred resolver (high level API)
