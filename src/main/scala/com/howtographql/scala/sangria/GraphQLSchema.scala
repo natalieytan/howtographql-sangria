@@ -159,6 +159,8 @@ object GraphQLSchema {
   val PostedByArg: Argument[Int] = Argument("postedById", IntType)
   val LinkIdArg: Argument[Int] = Argument("linkId", IntType)
   val UserIdArg: Argument[Int] = Argument("userId", IntType)
+  val EmailArg: Argument[String] = Argument("email", StringType)
+  val PasswordArg: Argument[String] = Argument("password", StringType)
 
   val Resolver: DeferredResolver[MyContext] = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
 
@@ -206,6 +208,7 @@ object GraphQLSchema {
         "createLink",
         LinkType,
         arguments = UrlArg :: DescArg :: PostedByArg :: Nil,
+        tags = Authorized :: Nil, // tags are informative, and you have to manage logic yourself
         resolve = c => c.ctx.dao.createLink(c.arg(UrlArg), c.arg(DescArg), c.arg(PostedByArg))
       ),
       Field(
@@ -213,8 +216,21 @@ object GraphQLSchema {
         VoteType,
         arguments = LinkIdArg :: UserIdArg :: Nil,
         resolve = c => c.ctx.dao.createVote(c.arg(LinkIdArg), c.arg(UserIdArg))
+      ),
+      Field(
+        "login",
+        UserType,
+        arguments = EmailArg :: PasswordArg :: Nil,
+        resolve = ctx => UpdateCtx(
+          ctx.ctx.login(ctx.arg(EmailArg), ctx.arg(PasswordArg))) {
+          user => ctx.ctx.copy(currentUser = Some(user))
+        }
       )
     )
+
+    // UpdateCtx takes 2 parameters
+    // First -- function responsible for producing response
+    // Output of first function passed to second function, which has to respond with a context type
   )
 
   // All mutations are optional so you have to wrap it in Some

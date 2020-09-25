@@ -1,9 +1,23 @@
 package com.howtographql.scala.sangria
 
+import com.howtographql.scala.sangria.models.{AuthenticationException, AuthorizationException, User}
+
+import scala.concurrent._
+import scala.concurrent.duration.Duration
+
 // Context is an object flowing across whole execution
-// Main resposibility = provide data and utils needed to fufil the query
+// Main responsibility = provide data and utils needed to fulfil the query
 // Can put DAO on context, so all queries will have access to database
 // Can also put authentication data here
-case class MyContext(dao: DAO) {
+case class MyContext(dao: DAO, currentUser: Option[User] = None) {
+  def login(email: String, password: String): User = {
+    val userOpt = Await.result(dao.authenticate(email, password), Duration.Inf)
+    userOpt.getOrElse(
+      throw AuthenticationException("email or password are incorrect!")
+    )
+  }
 
+  def ensureAuthenticated(): Unit =
+    if(currentUser.isEmpty)
+      throw AuthorizationException("You do not have permission. Please sign in.")
 }

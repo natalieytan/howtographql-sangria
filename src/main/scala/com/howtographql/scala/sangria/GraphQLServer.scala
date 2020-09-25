@@ -1,17 +1,18 @@
 package com.howtographql.scala.sangria
 
-import akka.http.scaladsl.server.Route
-import sangria.parser.QueryParser
-import spray.json.{JsObject, JsString, JsValue}
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route
+import com.howtographql.scala.sangria.models.{AuthenticationException, AuthorizationException}
+import sangria.ast.Document
+import sangria.execution.{ExceptionHandler => EHandler, _}
+import sangria.marshalling.sprayJson._
+import sangria.parser.QueryParser
+import spray.json.{JsObject, JsString, JsValue}
+
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
-import akka.http.scaladsl.server._
-import sangria.ast.Document
-import sangria.execution._
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import sangria.marshalling.sprayJson._
 
 
 object GraphQLServer {
@@ -57,6 +58,14 @@ object GraphQLServer {
 
   }
 
+  // Custom Exception Handler
+  // Needs a partial function which convert type of exception into a HandledException
+  // This exception is internally converted into proper JSON response and sent back to the client
+  val ErrorHandler: EHandler = EHandler {
+    case (_, AuthenticationException(message)) => HandledException(message)
+    case (_, AuthorizationException(message)) => HandledException(message)
+  }
+
   private def executeGraphQLQuery(query: Document, operation: Option[String], vars: JsObject)(implicit ec: ExecutionContext) = {
     // Where query is executed
     Executor.execute(
@@ -65,7 +74,9 @@ object GraphQLServer {
       MyContext(dao), // context object
       variables = vars, // read from request
       operationName = operation, // read from request
-      deferredResolver = GraphQLSchema.Resolver
+      deferredResolver = GraphQLSchema.Resolver,
+      exceptionHandler = ErrorHandler,
+      middleware = AuthMiddleware :: Nil
     ).map(OK -> _)
       .recover {
         case error: QueryAnalysisError => BadRequest -> error.resolveError
