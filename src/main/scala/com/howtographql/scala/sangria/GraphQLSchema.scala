@@ -5,6 +5,8 @@ import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Identifia
 import sangria.schema._
 import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId, Relation, RelationIds}
 import sangria.ast.StringValue
+import sangria.marshalling.FromInput
+import sangria.util.tag.@@
 
 // What we are able to query for
 // Interprets how data fetched and which data source it could use
@@ -13,7 +15,7 @@ import sangria.ast.StringValue
 object GraphQLSchema {
   // custom scalar declare with implicit
   // scalars make possible to parse values type you want to
-  implicit val GraphQLDateTime = ScalarType[DateTime](
+  implicit val GraphQLDateTime: ScalarType[DateTime] = ScalarType[DateTime](
     "DateTime", // this name will be used in schema
     coerceOutput = (dt, _) => dt.toString, // used to output data (DateTime to string)
     coerceInput = { // need a partial function with Value as a single argument. In our case we're parsing from StringValue
@@ -29,7 +31,7 @@ object GraphQLSchema {
   // Right should consist an object of expected type
   // In the case of failure, Left should contain Violation Subtype
 
-  val IdentifiableType = InterfaceType(
+  val IdentifiableType: InterfaceType[Unit, Identifiable] = InterfaceType(
     "Identifiable",
     fields[Unit, Identifiable](
       Field("id", IntType, resolve = _.value.id)
@@ -86,15 +88,15 @@ object GraphQLSchema {
   // SimpleRelation
   // 2 Arguments: 1) name, 2) function which extracts sequence of user Ids from link entity
   // In relation we always have to return sequence
-  val linkByUserRel = Relation[Link, Int]("byUser", l => Seq(l.postedBy))
+  val linkByUserRel: Relation[Link, Link, Int] = Relation[Link, Int]("byUser", l => Seq(l.postedBy))
 
-  val voteByUserRel = Relation[Vote, Int]("byUser", v => Seq(v.userId))
+  val voteByUserRel: Relation[Vote, Vote, Int] = Relation[Vote, Int]("byUser", v => Seq(v.userId))
 
   val usersFetcher: Fetcher[MyContext, User, User, Int] = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
   )
 
-  val votesFetcher = Fetcher.rel(
+  val votesFetcher: Fetcher[MyContext, Vote, Vote, Int] = Fetcher.rel(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids),
     (ctx: MyContext, ids: RelationIds[Vote]) => ctx.dao.getVotesByUserIds(ids(voteByUserRel))
   )
@@ -109,7 +111,7 @@ object GraphQLSchema {
   // 1) either by implicit val in companion object of model
   // 2) or explicitly passing it in
   // 3) implicit val in the same context
-  val linksFetcher = Fetcher.rel(
+  val linksFetcher: Fetcher[MyContext, Link, Link, Int] = Fetcher.rel(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids),
     (ctx: MyContext, ids: RelationIds[Link]) => ctx.dao.getLinksByUserIds(ids(linkByUserRel))
   )
@@ -118,14 +120,14 @@ object GraphQLSchema {
   // ids(linksByUserRel) extracts user ids defined relation
 
 
-  val Id = Argument("id", IntType)
-  val Ids = Argument("ids", ListInputType(IntType))
+  val Id: Argument[Int] = Argument("id", IntType)
+  val Ids: Argument[Seq[Int @@ FromInput.CoercedScalaResult]] = Argument("ids", ListInputType(IntType))
 
 
-  val Resolver = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
+  val Resolver: DeferredResolver[MyContext] = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
 
   // QueryType is a top level object of schema
-  val QueryType = ObjectType(
+  val QueryType: ObjectType[MyContext, Unit] = ObjectType(
     "Query",
     fields[MyContext, Unit](
       Field("allLinks",
@@ -155,5 +157,5 @@ object GraphQLSchema {
     )
   )
 
-  val SchemaDefinition = Schema(QueryType)
+  val SchemaDefinition: Schema[MyContext, Unit] = Schema(QueryType)
 }
